@@ -13,6 +13,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -51,19 +52,23 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
     static class TestContextManager {
 
         private TestContext ctx;
+        private final List<TestExecutionListener> listeners = List.of(new AutowiredTestExecutionListener(), new TransactionalTestExecutionListener());
 
         private TestContextManager(Class<?> testClass) {
             ctx = new TestContextBootstrapper(testClass).getTestContext();
         }
 
         void beforeTestClass() {
+            listeners.forEach(listener -> listener.beforeTestClass(ctx));
         }
 
         void afterTestClass() {
+            listeners.reversed().forEach(listener -> listener.afterTestClass(ctx));
         }
 
         void prepareTestInstance(Object testInstance) {
-            ctx.getApplicationContext().getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+            ctx.setTestInstance(testInstance);
+            listeners.forEach(listener -> listener.prepareTestInstance(ctx));
         }
     }
 
@@ -134,6 +139,37 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
                 return 0;
             }
             return Objects.hash(testProperty.key(), testProperty.value());
+        }
+    }
+
+    public interface TestExecutionListener {
+        default void beforeTestClass(TestContext ctx) {
+        }
+
+        default void afterTestClass(TestContext ctx) {
+        }
+
+        default void prepareTestInstance(TestContext ctx) {
+        }
+    }
+
+    static class AutowiredTestExecutionListener implements TestExecutionListener {
+
+        @Override
+        public void prepareTestInstance(TestContext ctx) {
+            ctx.getApplicationContext().getAutowireCapableBeanFactory().autowireBeanProperties(ctx.getTestInstance(), AUTOWIRE_NO, false);
+        }
+    }
+
+    static class TransactionalTestExecutionListener implements TestExecutionListener {
+        @Override
+        public void beforeTestClass(TestContext ctx) {
+            System.out.println("Starting transaction");
+        }
+
+        @Override
+        public void afterTestClass(TestContext ctx) {
+            System.out.println("Rolling back transaction");
         }
     }
 }
