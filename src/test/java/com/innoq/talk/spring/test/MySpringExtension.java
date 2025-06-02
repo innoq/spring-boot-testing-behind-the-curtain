@@ -5,7 +5,13 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.mock.env.MockPropertySource;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 import static org.springframework.beans.factory.config.AutowireCapableBeanFactory.AUTOWIRE_NO;
 
@@ -44,10 +50,7 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
         private AnnotationConfigApplicationContext ctx;
 
         private TestContextManager(Class<?> testClass) {
-            ctx = new AnnotationConfigApplicationContext();
-            ctx.getEnvironment().getPropertySources().addFirst(new MockPropertySource().withProperty("greeting", "Moin %s."));
-            ctx.scan(Application.class.getPackageName());
-            ctx.refresh();
+            ctx = new TestContextBootstrapper(testClass).getApplicationContext();
         }
 
         void beforeTestClass() {
@@ -58,6 +61,34 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
 
         void prepareTestInstance(Object testInstance) {
             ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+        }
+    }
+
+    @Target(ElementType.TYPE)
+    @Retention(RetentionPolicy.RUNTIME)
+    public @interface MyTestProperty {
+        String key();
+        String value();
+    }
+
+    static class TestContextBootstrapper {
+
+        private AnnotationConfigApplicationContext ctx;
+
+        TestContextBootstrapper(Class<?> testClass) {
+            ctx = new AnnotationConfigApplicationContext();
+
+            var testProperty = AnnotationUtils.findAnnotation(testClass, MyTestProperty.class);
+            if (testProperty != null) {
+                ctx.getEnvironment().getPropertySources().addFirst(new MockPropertySource().withProperty(testProperty.key(), testProperty.value()));
+            }
+
+            ctx.scan(Application.class.getPackageName());
+            ctx.refresh();
+        }
+
+        AnnotationConfigApplicationContext getApplicationContext() {
+            return ctx;
         }
     }
 }
