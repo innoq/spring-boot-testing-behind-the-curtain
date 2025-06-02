@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MySpringExtension.class)
 @MyTestProperty(key = "greeting", value = "Hello, %s!")
-class GreeterTests {
+class Greeter2Tests {
 
     @Autowired
     Greeter greeter;

@@ -12,6 +12,9 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
 import static org.springframework.beans.factory.config.AutowireCapableBeanFactory.AUTOWIRE_NO;
 
@@ -47,10 +50,10 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
 
     static class TestContextManager {
 
-        private AnnotationConfigApplicationContext ctx;
+        private TestContext ctx;
 
         private TestContextManager(Class<?> testClass) {
-            ctx = new TestContextBootstrapper(testClass).getApplicationContext();
+            ctx = new TestContextBootstrapper(testClass).getTestContext();
         }
 
         void beforeTestClass() {
@@ -60,7 +63,7 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
         }
 
         void prepareTestInstance(Object testInstance) {
-            ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+            ctx.getApplicationContext().getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
         }
     }
 
@@ -73,22 +76,64 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
 
     static class TestContextBootstrapper {
 
-        private AnnotationConfigApplicationContext ctx;
+        private TestContext ctx;
 
         TestContextBootstrapper(Class<?> testClass) {
-            ctx = new AnnotationConfigApplicationContext();
-
             var testProperty = AnnotationUtils.findAnnotation(testClass, MyTestProperty.class);
-            if (testProperty != null) {
-                ctx.getEnvironment().getPropertySources().addFirst(new MockPropertySource().withProperty(testProperty.key(), testProperty.value()));
-            }
-
-            ctx.scan(Application.class.getPackageName());
-            ctx.refresh();
+            ctx = new TestContext(testClass, testProperty);
         }
 
-        AnnotationConfigApplicationContext getApplicationContext() {
+        TestContext getTestContext() {
             return ctx;
+        }
+    }
+
+    static class TestContext {
+
+        private static Map<Integer, AnnotationConfigApplicationContext> CACHE = new HashMap<>();
+
+        private final Class<?> testClass;
+        private final MyTestProperty testProperty;
+        private Object testInstance;
+
+        TestContext(Class<?> testClass, MyTestProperty testProperty) {
+            this.testClass = testClass;
+            this.testProperty = testProperty;
+        }
+
+        public Class<?> getTestClass() {
+            return testClass;
+        }
+
+        public void setTestInstance(Object testInstance) {
+            this.testInstance = testInstance;
+        }
+
+        public Object getTestInstance() {
+            return testInstance;
+        }
+
+        public AnnotationConfigApplicationContext getApplicationContext() {
+            return CACHE.computeIfAbsent(this.hashCode(), hash -> {
+                var ctx = new AnnotationConfigApplicationContext();
+
+                if (testProperty != null) {
+                    ctx.getEnvironment().getPropertySources().addFirst(new MockPropertySource().withProperty(testProperty.key(), testProperty.value()));
+                }
+
+                ctx.scan(Application.class.getPackageName());
+                ctx.refresh();
+
+                return ctx;
+            });
+        }
+
+        @Override
+        public int hashCode() {
+            if (testProperty == null) {
+                return 0;
+            }
+            return Objects.hash(testProperty.key(), testProperty.value());
         }
     }
 }
