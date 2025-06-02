@@ -13,19 +13,51 @@ public class MySpringExtension implements BeforeAllCallback, TestInstancePostPro
 
     @Override
     public void beforeAll(ExtensionContext context) {
+        getTestContextManager(context).beforeTestClass();
     }
 
     @Override
     public void postProcessTestInstance(Object testInstance, ExtensionContext context) {
-        var ctx = new AnnotationConfigApplicationContext();
-        ctx.getEnvironment().getPropertySources().addFirst(new MockPropertySource().withProperty("greeting", "Moin %s."));
-        ctx.scan(Application.class.getPackageName());
-        ctx.refresh();
-
-        ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+        getTestContextManager(context).prepareTestInstance(testInstance);
     }
 
     @Override
     public void afterAll(ExtensionContext context) {
+        getTestContextManager(context).afterTestClass();
+        getStore(context).remove(context.getRequiredTestClass());
+    }
+
+    private static final ExtensionContext.Namespace NAMESPACE = ExtensionContext.Namespace.create(MySpringExtension.class);
+
+    private static TestContextManager getTestContextManager(ExtensionContext context) {
+        Class<?> testClass = context.getRequiredTestClass();
+        var store = getStore(context);
+        return store.getOrComputeIfAbsent(testClass, TestContextManager::new, TestContextManager.class);
+    }
+
+    private static ExtensionContext.Store getStore(ExtensionContext context) {
+        return context.getRoot().getStore(NAMESPACE);
+    }
+
+    static class TestContextManager {
+
+        private AnnotationConfigApplicationContext ctx;
+
+        private TestContextManager(Class<?> testClass) {
+            ctx = new AnnotationConfigApplicationContext();
+            ctx.getEnvironment().getPropertySources().addFirst(new MockPropertySource().withProperty("greeting", "Moin %s."));
+            ctx.scan(Application.class.getPackageName());
+            ctx.refresh();
+        }
+
+        void beforeTestClass() {
+        }
+
+        void afterTestClass() {
+        }
+
+        void prepareTestInstance(Object testInstance) {
+            ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+        }
     }
 }
