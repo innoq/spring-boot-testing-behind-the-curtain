@@ -5,10 +5,15 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.core.env.MapPropertySource;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 import java.util.Map;
 
+import static java.lang.annotation.ElementType.TYPE;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
 import static org.springframework.beans.factory.config.AutowireCapableBeanFactory.AUTOWIRE_NO;
 
 public class DemoSpringExtension implements BeforeAllCallback, TestInstancePostProcessor, AfterAllCallback {
@@ -52,11 +57,7 @@ public class DemoSpringExtension implements BeforeAllCallback, TestInstancePostP
         private final AnnotationConfigApplicationContext ctx;
 
         private TestContextManager(Class<?> testClass) {
-            ctx = new AnnotationConfigApplicationContext();
-            ctx.getEnvironment().getPropertySources()
-                    .addFirst(new MapPropertySource("test", Map.of("greeting", "Hi %s!")));
-            ctx.scan(Application.class.getPackageName());
-            ctx.refresh();
+            ctx = new TestContextBootstrapper(testClass).getApplicationContext();
         }
 
         void beforeTestClass() {
@@ -67,6 +68,35 @@ public class DemoSpringExtension implements BeforeAllCallback, TestInstancePostP
 
         void prepareTestInstance(Object testInstance) {
             ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+        }
+    }
+
+    @Target(TYPE)
+    @Retention(RUNTIME)
+    public @interface TestProperty {
+        String key();
+        String value();
+    }
+
+    static class TestContextBootstrapper {
+
+        private final AnnotationConfigApplicationContext ctx;
+
+        TestContextBootstrapper(Class<?> testClass) {
+            ctx = new AnnotationConfigApplicationContext();
+
+            var testProperty = AnnotationUtils.findAnnotation(testClass, TestProperty.class);
+            if (testProperty != null) {
+                ctx.getEnvironment().getPropertySources()
+                        .addFirst(new MapPropertySource("test", Map.of(testProperty.key(), testProperty.value())));
+            }
+
+            ctx.scan(Application.class.getPackageName());
+            ctx.refresh();
+        }
+
+        AnnotationConfigApplicationContext getApplicationContext() {
+            return ctx;
         }
     }
 }
