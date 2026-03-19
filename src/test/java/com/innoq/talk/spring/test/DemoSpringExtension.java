@@ -15,20 +15,58 @@ public class DemoSpringExtension implements BeforeAllCallback, TestInstancePostP
 
     @Override
     public void beforeAll(ExtensionContext context) {
+        getTestContextManager(context).beforeTestClass();
     }
 
     @Override
     public void postProcessTestInstance(Object testInstance, ExtensionContext context) {
-        var ctx = new AnnotationConfigApplicationContext();
-        ctx.getEnvironment().getPropertySources()
-                .addFirst(new MapPropertySource("test", Map.of("greeting", "Hi %s!")));
-        ctx.scan(Application.class.getPackageName());
-        ctx.refresh();
-
-        ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+        getTestContextManager(context).prepareTestInstance(testInstance);
     }
 
     @Override
     public void afterAll(ExtensionContext context) {
+        getTestContextManager(context).afterTestClass();
+        removeTestContextManager(context);
+    }
+
+    private static final ExtensionContext.Namespace NAMESPACE = ExtensionContext.Namespace.create(DemoSpringExtension.class);
+
+    private static TestContextManager getTestContextManager(ExtensionContext context) {
+        Class<?> testClass = context.getRequiredTestClass();
+        var store = getStore(context);
+        return store.computeIfAbsent(testClass, TestContextManager::new, TestContextManager.class);
+    }
+
+    private static void removeTestContextManager(ExtensionContext context) {
+        Class<?> testClass = context.getRequiredTestClass();
+        var store = getStore(context);
+        store.remove(testClass);
+    }
+
+    private static ExtensionContext.Store getStore(ExtensionContext context) {
+        return context.getRoot().getStore(NAMESPACE);
+    }
+
+    static class TestContextManager {
+
+        private final AnnotationConfigApplicationContext ctx;
+
+        private TestContextManager(Class<?> testClass) {
+            ctx = new AnnotationConfigApplicationContext();
+            ctx.getEnvironment().getPropertySources()
+                    .addFirst(new MapPropertySource("test", Map.of("greeting", "Hi %s!")));
+            ctx.scan(Application.class.getPackageName());
+            ctx.refresh();
+        }
+
+        void beforeTestClass() {
+        }
+
+        void afterTestClass() {
+        }
+
+        void prepareTestInstance(Object testInstance) {
+            ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+        }
     }
 }
