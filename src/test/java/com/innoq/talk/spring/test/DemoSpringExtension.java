@@ -10,7 +10,9 @@ import org.springframework.core.env.MapPropertySource;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 import static java.lang.annotation.ElementType.TYPE;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
@@ -54,10 +56,10 @@ public class DemoSpringExtension implements BeforeAllCallback, TestInstancePostP
 
     static class TestContextManager {
 
-        private final AnnotationConfigApplicationContext ctx;
+        private final TestContext ctx;
 
         private TestContextManager(Class<?> testClass) {
-            ctx = new TestContextBootstrapper(testClass).getApplicationContext();
+            ctx = new TestContextBootstrapper(testClass).getTestContext();
         }
 
         void beforeTestClass() {
@@ -67,7 +69,7 @@ public class DemoSpringExtension implements BeforeAllCallback, TestInstancePostP
         }
 
         void prepareTestInstance(Object testInstance) {
-            ctx.getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
+            ctx.getApplicationContext().getAutowireCapableBeanFactory().autowireBeanProperties(testInstance, AUTOWIRE_NO, false);
         }
     }
 
@@ -80,23 +82,65 @@ public class DemoSpringExtension implements BeforeAllCallback, TestInstancePostP
 
     static class TestContextBootstrapper {
 
-        private final AnnotationConfigApplicationContext ctx;
+        private final TestContext ctx;
 
         TestContextBootstrapper(Class<?> testClass) {
-            ctx = new AnnotationConfigApplicationContext();
-
             var testProperty = AnnotationUtils.findAnnotation(testClass, TestProperty.class);
-            if (testProperty != null) {
-                ctx.getEnvironment().getPropertySources()
-                        .addFirst(new MapPropertySource("test", Map.of(testProperty.key(), testProperty.value())));
-            }
-
-            ctx.scan(Application.class.getPackageName());
-            ctx.refresh();
+            ctx = new TestContext(testClass, testProperty);
         }
 
-        AnnotationConfigApplicationContext getApplicationContext() {
+        TestContext getTestContext() {
             return ctx;
+        }
+    }
+
+    static class TestContext {
+
+        private static Map<Integer, AnnotationConfigApplicationContext> CACHE = new HashMap<>();
+
+        private final Class<?> testClass;
+        private final TestProperty testProperty;
+        private Object testInstance;
+
+        TestContext(Class<?> testClass, TestProperty testProperty) {
+            this.testClass = testClass;
+            this.testProperty = testProperty;
+        }
+
+        public Class<?> getTestClass() {
+            return testClass;
+        }
+
+        public void setTestInstance(Object testInstance) {
+            this.testInstance = testInstance;
+        }
+
+        public Object getTestInstance() {
+            return testInstance;
+        }
+
+        public AnnotationConfigApplicationContext getApplicationContext() {
+            return CACHE.computeIfAbsent(this.hashCode(), hash -> {
+                var ctx = new AnnotationConfigApplicationContext();
+
+                if (testProperty != null) {
+                    ctx.getEnvironment().getPropertySources()
+                            .addFirst(new MapPropertySource("test", Map.of(testProperty.key(), testProperty.value())));
+                }
+
+                ctx.scan(Application.class.getPackageName());
+                ctx.refresh();
+
+                return ctx;
+            });
+        }
+
+        @Override
+        public int hashCode() {
+            if (testProperty == null) {
+                return 0;
+            }
+            return Objects.hash(testProperty.key(), testProperty.value());
         }
     }
 }
