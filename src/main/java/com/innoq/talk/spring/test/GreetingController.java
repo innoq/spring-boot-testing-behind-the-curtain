@@ -15,7 +15,7 @@ class GreetingController {
         this.greeter = greeter;
     }
 
-    @GetMapping("")
+    @GetMapping
     public Map<String, String> index(@RequestParam(defaultValue = "Spring") String name) {
         var greeting = greeter.greet(name);
         return Map.of(

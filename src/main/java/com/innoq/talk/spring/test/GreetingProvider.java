@@ -6,8 +6,11 @@ import org.springframework.stereotype.Component;
 @Component
 class GreetingProvider {
 
-    @Value("${greeting}")
-    private String greeting;
+    private final String greeting;
+
+    public GreetingProvider(@Value("${greeting}") String greeting) {
+        this.greeting = greeting;
+    }
 
     public String get() {
         return greeting;
