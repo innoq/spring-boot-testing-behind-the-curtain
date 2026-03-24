@@ -1,5 +1,6 @@
 package com.innoq.talk.spring.test;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +17,7 @@ class GreetingController {
     }
 
     @GetMapping
+//    @DeleteMapping
     public Map<String, String> index(@RequestParam(defaultValue = "Spring") String name) {
         var greeting = greeter.greet(name);
         return Map.of(
